@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pixel Farm</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg: #121614; --panel: #1e2421; --accent: #4ade80; --gold: #fbbf24;
+            --text: #ffffff; --text-muted: #9ca3af; --btn: #2d3748; --onyx: #60a5fa;
+        }
+        * { box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+        
+        body { 
+            margin: 0; padding: 0; 
+            background-image: url('bg.jpg'); 
+            background-size: cover; 
+            background-position: center; 
+            background-repeat: no-repeat;
+            color: var(--text); 
+            font-family: -apple-system, sans-serif; 
+            display: flex; flex-direction: column; 
+            height: 100vh; height: var(--tg-viewport-height, 100vh); 
+            overflow: hidden; 
+        }
+
+        .screen { display: none; flex-direction: column; height: 100%; width: 100%; position: absolute; top: 0; left: 0; padding-bottom: 70px; }
+        .screen.active { display: flex; }
+
+        .top-hud { 
+            padding: 10px 15px; 
+            background: rgba(18, 22, 20, 0.85); 
+            backdrop-filter: blur(10px); 
+            border-bottom-left-radius: 15px; 
+            border-bottom-right-radius: 15px; 
+            display: flex; flex-direction: column; gap: 10px; z-index: 10; 
+            border-bottom: 1px solid rgba(74, 222, 128, 0.2);
+        }
+        
+        .level-bar { background: rgba(45, 55, 72, 0.9); border-radius: 10px; padding: 8px; text-align: center; font-weight: bold; font-size: 0.9rem; cursor: pointer; border: 1px solid var(--accent); }
+        
+        .currencies { display: flex; justify-content: space-between; }
+        .currency-box { display: flex; align-items: center; gap: 5px; font-size: 1.2rem; font-weight: bold; }
+        .coin-color { color: var(--gold); }
+        .onyx-color { color: var(--onyx); } 
+
+        .daily-actions { display: flex; gap: 8px; padding: 10px 15px; }
+        .action-btn { flex: 1; background: rgba(45, 55, 72, 0.9); border-radius: 12px; padding: 10px 5px; text-align: center; font-size: 0.75rem; font-weight: bold; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; backdrop-filter: blur(5px); }
+        .action-btn .icon { font-size: 1.5rem; }
+        .action-btn:active { background: var(--accent); color: #000; }
+        .action-btn.disabled { opacity: 0.5; pointer-events: none; }
+
+        .game-area { flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+        
+        /* CSS-кристалл */
+        .click-target { 
+            width: 160px; height: 200px; 
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 50%, #166534 100%);
+            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+            cursor: pointer; 
+            transition: transform 0.1s;
+            filter: drop-shadow(0 0 35px rgba(74, 222, 128, 0.8));
+            position: relative;
+        }
+        .click-target::after {
+            content: ''; position: absolute; top: 10%; left: 20%; width: 30%; height: 30%;
+            background: rgba(255,255,255,0.4); clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+        }
+        .click-target:active { transform: scale(0.9) rotate(-5deg); }
+        
+        .stats-text { color: var(--text); font-size: 0.9rem; text-align: center; margin-top: 20px; line-height: 1.5; text-shadow: 0 2px 4px #000; font-weight: bold; }
+
+        .floating-text { position: absolute; font-weight: bold; font-size: 1.5rem; pointer-events: none; animation: floatUp 0.8s ease-out forwards; text-shadow: 0 2px 4px rgba(0,0,0,0.8); transform: translate(-50%, -50%); }
+[17.10.2026 15:13] николаs: .floating-text.crit { color: var(--gold); font-size: 2.2rem; z-index: 10; }
+        @keyframes floatUp { 0% { opacity: 1; margin-top: 0; } 100% { opacity: 0; margin-top: -100px; } }
+
+        .bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; height: 70px; background: rgba(18, 22, 20, 0.95); backdrop-filter: blur(10px); display: flex; justify-content: space-around; align-items: center; z-index: 100; border-top: 1px solid rgba(74, 222, 128, 0.3); }
+        .nav-item { display: flex; flex-direction: column; align-items: center; color: var(--text-muted); font-size: 0.75rem; cursor: pointer; width: 33%; }
+        .nav-item.active { color: var(--accent); }
+        .nav-item .icon { font-size: 1.5rem; margin-bottom: 3px; }
+
+        .shop-overlay { position: fixed; bottom: -100%; left: 0; width: 100%; height: 60%; background: rgba(18, 22, 20, 0.98); backdrop-filter: blur(15px); border-top-left-radius: 20px; border-top-right-radius: 20px; transition: bottom 0.3s ease; z-index: 200; display: flex; flex-direction: column; padding: 15px; box-shadow: 0 -10px 30px rgba(0,0,0,0.8); border-top: 1px solid rgba(74, 222, 128, 0.4); }
+        .shop-overlay.open { bottom: 70px; }
+        .close-shop { position: absolute; top: 15px; right: 15px; font-size: 1.5rem; cursor: pointer; color: var(--text-muted); }
+        
+        .tabs { display: flex; gap: 5px; margin-bottom: 10px; margin-top: 10px; }
+        .tab-btn { flex: 1; padding: 10px; background: var(--btn); color: var(--text); border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .tab-btn.active { background: var(--accent); color: #000; }
+        .tab-content { flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+        
+        .shop-item { background: rgba(45, 55, 72, 0.9); padding: 12px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border: 1px solid rgba(255,255,255,0.05); }
+        .shop-item.disabled { opacity: 0.5; pointer-events: none; }
+        .item-info { display: flex; flex-direction: column; }
+        .item-name { font-weight: bold; font-size: 0.9rem; }
+        .item-desc { font-size: 0.75rem; color: var(--text-muted); }
+        .item-price { font-weight: bold; color: var(--gold); }
+
+        .tops-container { padding: 15px; flex-grow: 1; overflow-y: auto; }
+        .lb-tabs { display: flex; gap: 5px; margin-bottom: 15px; }
+        .lb-tab { flex: 1; padding: 8px; background: rgba(45, 55, 72, 0.6); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; font-size: 0.75rem; cursor: pointer; }
+        .lb-tab.active { background: var(--btn); color: var(--accent); border-color: var(--accent); }
+        .lb-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: rgba(45, 55, 72, 0.9); border-radius: 10px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.05); }
+        .lb-rank { font-weight: bold; color: var(--gold); width: 40px; }
+        .lb-name { flex-grow: 1; }
+        .lb-val { font-weight: bold; color: var(--accent); }
+
+        .profile-container { padding: 20px; display: flex; flex-direction: column; align-items: center; overflow-y: auto; }
+        .avatar { width: 100px; height: 100px; background: var(--btn); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 3rem; margin-bottom: 10px; background-size: cover; background-position: center; border: 3px solid var(--accent); box-shadow: 0 0 20px rgba(74, 222, 128, 0.4); }
+        .profile-name { font-size: 1.5rem; font-weight: bold; margin-bottom: 5px; }
+        .quests-box { width: 100%; background: rgba(18, 22, 20, 0.9); padding: 15px; border-radius: 15px; margin-top: 20px; backdrop-filter: blur(5px); border: 1px solid rgba(74, 222, 128, 0.2); }
+[17.10.2026 15:13] николаs: .shop-fab { position: absolute; bottom: 15px; right: 15px; background: var(--accent); color: #000; padding: 10px 20px; border-radius: 20px; font-weight: bold; font-size: 1rem; box-shadow: 0 4px 15px rgba(74, 222, 128, 0.6); cursor: pointer; z-index: 50; }
+
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 300; align-items: center; justify-content: center; flex-direction: column; backdrop-filter: blur(5px); }
+        .modal-content { background: rgba(30, 36, 33, 0.95); border: 1px solid var(--accent); padding: 30px; border-radius: 20px; text-align: center; width: 80%; max-width: 300px; box-shadow: 0 0 30px rgba(74,222,128,0.2); }
+        .modal-btn { margin-top: 20px; padding: 10px 20px; background: var(--accent); color: #000; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; width: 100%; }
+    </style>
+</head>
+<body>
+
+    <div id="main-screen" class="screen active">
+        <div class="top-hud">
+            <div class="level-bar" id="level-btn">Уровень 1 (Прокачать: 500)</div>
+            <div class="currencies">
+                <div class="currency-box coin-color"><span>🪙</span> <span id="score">0</span></div>
+                <div class="currency-box onyx-color"><span>💎</span> <span id="onyx-coins">0</span></div>
+            </div>
+        </div>
+
+        <div class="daily-actions">
+            <div class="action-btn" id="btn-case"><span class="icon">📦</span>Кейсы</div>
+            <div class="action-btn" id="btn-combo"><span class="icon">🔥</span>Комбо</div>
+            <div class="action-btn" id="btn-bonus"><span class="icon">🎁</span>Бонус</div>
+        </div>
+
+        <div class="game-area" id="game-area">
+            <div class="click-target" id="click-target"></div>
+            <div class="stats-text">
+                <div id="energy">⚡ 100 / 100</div>
+                <div id="click-power-text">+1 за клик</div>
+                <div id="crit-text" style="color: var(--gold);">Крит: 5% (x5)</div>
+            </div>
+            <div class="shop-fab" id="open-shop">🛒 Магазин</div>
+        </div>
+    </div>
+
+    <div id="tops-screen" class="screen">
+        <div class="top-hud" style="text-align: center; font-size: 1.2rem; font-weight: bold;">Рейтинги</div>
+        <div class="tops-container">
+            <div class="lb-tabs">
+                <button class="lb-tab active" data-lb="coins">Топ 100 🪙</button>
+                <button class="lb-tab" data-lb="refs">Топ 100 👥</button>
+                <button class="lb-tab" data-lb="donates">Топ 10 💎</button>
+            </div>
+            <div id="lb-list"></div>
+        </div>
+    </div>
+
+    <div id="profile-screen" class="screen">
+        <div class="top-hud" style="text-align: center; font-size: 1.2rem; font-weight: bold;">Профиль</div>
+        
+        <div class="profile-container">
+            <div class="avatar" id="avatar">👨‍🌾</div>
+            <div class="profile-name" id="profile-name">Игрок</div>
+            <div style="color: var(--text-muted); font-size: 0.8rem;" id="profile-id">ID: 0</div>
+            
+            <div class="action-btn" id="btn-open-quests" style="width: 100%; margin-top: 20px; padding: 15px; background: var(--accent); color: #000; border-radius: 12px; font-size: 1rem; font-weight: bold; display: flex; flex-direction: row; justify-content: center; gap: 10px;">
+                <span style="font-size: 1.2rem;">📜</span> Открыть Квесты
+            </div>
+
+            <div class="action-btn" id="btn-open-refs" style="width: 100%; margin-top: 10px; padding: 15px; background: rgba(45, 55, 72, 0.9); color: var(--text); border: 1px solid var(--accent); border-radius: 12px; font-size: 1rem; font-weight: bold; display: flex; flex-direction: row; justify-content: center; gap: 10px;">
+                <span style="font-size: 1.2rem;">👥</span> Мои рефералы (10%)
+            </div>
+[17.10.2026 15:13] николаs: <div class="quests-box" style="display: flex; flex-direction: column; gap: 12px;">
+                <div style="font-weight: bold; font-size: 1.1rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 5px;">Статистика</div>
+                <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-muted);">Уровень:</span><span style="font-weight: bold; color: var(--accent);" id="stat-level">1</span></div>
+                <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-muted);">Всего заработано 🪙:</span><span style="font-weight: bold; color: var(--gold);" id="stat-total-coins">0</span></div>
+                <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-muted);">Баланс Onyx 💎:</span><span style="font-weight: bold; color: var(--onyx);" id="stat-onyx">0</span></div>
+                <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-muted);">Пассивный доход:</span><span style="font-weight: bold; color: var(--text);" id="stat-passive">0/сек</span></div>
+            </div>
+
+            <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); width: 100%; text-align: center; font-size: 0.8rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 8px;">
+                <div>Владелец: <a href="https://t.me/loksero" target="_blank" style="color: var(--accent); text-decoration: none; font-weight: bold;">@loksero</a></div>
+                <div>Канал: <span id="bot-channel-link" style="color: var(--accent); font-weight: bold;">@channel_name</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="bottom-nav">
+        <div class="nav-item active" data-screen="main-screen"><span class="icon">🏠</span>Главная</div>
+        <div class="nav-item" data-screen="tops-screen"><span class="icon">👑</span>Топы</div>
+        <div class="nav-item" data-screen="profile-screen"><span class="icon">👤</span>Профиль</div>
+    </div>
+
+    <div class="shop-overlay" id="shop-overlay">
+        <div class="close-shop" id="close-shop">✖</div>
+        <div style="font-weight: bold; font-size: 1.2rem;">Магазин</div>
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="upgrades">Улучшения</button>
+            <button class="tab-btn" data-tab="businesses">Бизнесы</button>
+        </div>
+        <div class="tab-content" id="upgrades-tab">
+            <div class="shop-item" id="up-power"><div class="item-info"><span class="item-name">Кирка</span><span class="item-desc">Клик +1</span></div><span class="item-price">10</span></div>
+            <div class="shop-item" id="up-energy"><div class="item-info"><span class="item-name">Эликсир</span><span class="item-desc">Макс. энергия +50</span></div><span class="item-price">50</span></div>
+            <div class="shop-item" id="up-regen"><div class="item-info"><span class="item-name">Спортзал</span><span class="item-desc">Реген +1</span></div><span class="item-price">100</span></div>
+            <div class="shop-item" id="up-crit-chance"><div class="item-info"><span class="item-name">Точилка</span><span class="item-desc">Шанс крита +2%</span></div><span class="item-price">200</span></div>
+            <div class="shop-item" id="up-crit-mult"><div class="item-info"><span class="item-name">Алмаз</span><span class="item-desc">Множитель крита +1</span></div><span class="item-price">500</span></div>
+        </div>
+        <div class="tab-content" id="businesses-tab" style="display: none;">
+            <div class="shop-item" id="biz-farm"><div class="item-info"><span class="item-name">Шахта 🏗️</span><span class="item-desc">+1/сек</span></div><span class="item-price">100</span></div>
+[17.10.2026 15:13] николаs: <div class="shop-item" id="biz-tractor"><div class="item-info"><span class="item-name">Экскаватор 🚜</span><span class="item-desc">+5/сек</span></div><span class="item-price">500</span></div>
+            <div class="shop-item" id="biz-factory"><div class="item-info"><span class="item-name">Завод 🏭</span><span class="item-desc">+20/сек</span></div><span class="item-price">2000</span></div>
+        </div>
+    </div>
+
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <div id="modal-text" style="font-size: 1.1rem; line-height: 1.5;"></div>
+            <button class="modal-btn" id="modal-close">ОК</button>
+        </div>
+    </div>
+
+    <script>
+        window.Telegram.WebApp.ready(); window.Telegram.WebApp.expand();
+        const tg = window.Telegram.WebApp;
+        const user = tg.initDataUnsafe?.user || { id: 12345, first_name: "Фермер" };
+
+        function haptic(type) {
+            if (tg.HapticFeedback) {
+                if (type === 'light') tg.HapticFeedback.impactOccurred('light');
+                if (type === 'success') tg.HapticFeedback.notificationOccurred('success');
+                if (type === 'warning') tg.HapticFeedback.notificationOccurred('warning');
+            }
+        }
+
+        const levelNames = ["Новичок", "Сборщик", "Работяга", "Фермер", "Бригадир", "Шахтер", "Геолог", "Мастер", "Инженер", "Управляющий", "Магнат", "Олигарх", "Король рудников", "Император", "Легенда Pixel Farm"];
+
+        let state = {
+            score: parseFloat(localStorage.getItem('pf_score')) || 0,
+            totalEarned: parseFloat(localStorage.getItem('pf_totalEarned')) || 0,
+            onyxCoins: parseInt(localStorage.getItem('pf_onyxCoins')) || 0,
+            level: parseInt(localStorage.getItem('pf_level')) || 1,
+            clickPower: parseFloat(localStorage.getItem('pf_clickPower')) || 1,
+            energy: parseFloat(localStorage.getItem('pf_energy')) || 100,
+            maxEnergy: parseFloat(localStorage.getItem('pf_maxEnergy')) || 100,
+            regenRate: parseFloat(localStorage.getItem('pf_regenRate')) || 1,
+            passiveIncome: parseFloat(localStorage.getItem('pf_passiveIncome')) || 0,
+            critChance: parseFloat(localStorage.getItem('pf_critChance')) || 0.05,
+            critMult: parseFloat(localStorage.getItem('pf_critMult')) || 5,
+            dailyClicks: parseInt(localStorage.getItem('pf_dailyClicks')) || 0,
+            comboClaimed: localStorage.getItem('pf_comboClaimed') === 'true',
+            lastBonusTime: parseInt(localStorage.getItem('pf_lastBonusTime')) || 0
+        };
+
+        let costs = {
+            power: parseFloat(localStorage.getItem('pf_cost_power')) || 10,
+            energy: parseFloat(localStorage.getItem('pf_cost_energy')) || 50,
+            regen: parseFloat(localStorage.getItem('pf_cost_regen')) || 100,
+            critChance: parseFloat(localStorage.getItem('pf_cost_critChance')) || 200,
+            critMult: parseFloat(localStorage.getItem('pf_cost_critMult')) || 500,
+            farm: parseFloat(localStorage.getItem('pf_cost_farm')) || 100,
+            tractor: parseFloat(localStorage.getItem('pf_cost_tractor')) || 500,
+            factory: parseFloat(localStorage.getItem('pf_cost_factory')) || 2000
+        };
+
+        let refList = JSON.parse(localStorage.getItem('pf_refList')) || [];
+        const $ = id => document.getElementById(id);
+        const scoreEl = $('score'), onyxCoinsEl = $('onyx-coins'), energyEl = $('energy');
+        const clickPowerEl = $('click-power-text'), critTextEl = $('crit-text'), targetEl = $('click-target');
+        const gameArea = $('game-area'), lbList = $('lb-list');
+        const modal = $('modal'), modalText = $('modal-text');
+
+        function formatNum(num) {
+            if (num >= 1e9) return (num / 1e9).toFixed(1) + 'B';
+            if (num >= 1e6) return (num / 1e6).toFixed(1) + 'M';
+            if (num >= 1e3) return (num / 1e3).toFixed(1) + 'K';
+            return Math.floor(num);
+        }
+[17.10.2026 15:13] николаs: function showModal(text) { modalText.innerHTML = text; modal.style.display = 'flex'; }
+
+        function saveGame() {
+            for (let key in state) localStorage.setItem('pf_' + key, state[key]);
+            for (let key in costs) localStorage.setItem('pf_cost_' + key, costs[key]);
+        }
+
+        function updateUI() {
+            scoreEl.innerText = formatNum(state.score);
+            onyxCoinsEl.innerText = state.onyxCoins;
+            energyEl.innerText = ⚡ ${Math.floor(state.energy)} / ${state.maxEnergy};
+            clickPowerEl.innerText = +${formatNum(state.clickPower)} за клик;
+            critTextEl.innerText = Крит: ${Math.round(state.critChance * 100)}% (x${state.critMult});
+            
+            let lvlCost = state.level * 500;
+            let lvlName = levelNames[state.level - 1] || "Легенда";
+            $('level-btn').innerText = ${lvlName} (Прокачать: ${lvlCost} 🪙);
+            $('level-btn').style.borderColor = (state.score >= lvlCost) ? 'var(--gold)' : 'var(--accent)';
+
+            if($('stat-level')) $('stat-level').innerText = state.level;
+            if($('stat-total-coins')) $('stat-total-coins').innerText = formatNum(state.totalEarned);
+            if($('stat-onyx')) $('stat-onyx').innerText = state.onyxCoins;
+            if($('stat-passive')) $('stat-passive').innerText = formatNum(state.passiveIncome) + '/сек';
+
+            if (state.comboClaimed) $('btn-combo').classList.add('disabled');
+            else $('btn-combo').classList.remove('disabled');
+
+            renderTops('coins');
+            saveGame();
+        }
+
+        targetEl.addEventListener('click', (e) => {
+            if (state.energy >= 1) {
+                state.energy -= 1;
+                state.dailyClicks++;
+                
+                let isCrit = Math.random() < state.critChance;
+                let earned = state.clickPower;
+                
+                if (isCrit) {
+                    earned *= state.critMult;
+                    haptic('warning');
+                    showFloatingText(e, КРИТ! +${formatNum(earned)}, 'var(--gold)', true);
+                } else {
+                    haptic('light');
+                    showFloatingText(e, +${formatNum(earned)});
+                }
+                state.score += earned;
+                state.totalEarned += earned;
+                updateUI();
+            } else {
+                showFloatingText(e, "Нет энергии!", '#ef4444');
+            }
+        });
+
+        function showFloatingText(e, text, color = 'var(--accent)', isCrit = false) {
+            const rect = targetEl.getBoundingClientRect();
+            const x = e.clientX || (rect.left + rect.width / 2);
+            const y = e.clientY || (rect.top + rect.height / 2);
+            const div = document.createElement('div');
+            div.className = 'floating-text' + (isCrit ? ' crit' : '');
+            div.innerText = text;
+            div.style.color = color;
+            div.style.left = ${x}px; div.style.top = ${y}px;
+            gameArea.appendChild(div);
+            setTimeout(() => div.remove(), 800);
+        }
+
+        setInterval(() => {
+            if (state.energy < state.maxEnergy) {
+                state.energy = Math.min(state.maxEnergy, state.energy + state.regenRate);
+                updateUI();
+            }
+        }, 2000);
+
+        setInterval(() => {
+            if (state.passiveIncome > 0) {
+                state.score += state.passiveIncome;
+                state.totalEarned += state.passiveIncome;
+                updateUI();
+            }
+        }, 1000);
+
+        $('level-btn').addEventListener('click', () => {
+            if (state.level >= 15) { showModal("Ты достиг максимального уровня!"); return; }
+            let cost = Math.floor(state.level * 500 * (state.level * 0.8));
+[17.10.2026 15:13] николаs: if (state.score >= cost) {
+                state.score -= cost; state.level++; state.maxEnergy += 50; state.energy += 50;
+                haptic('success'); showModal(Уровень повышен!<br>Ты теперь <b>${levelNames[state.level - 1]}</b>!); updateUI();
+            } else { showModal(Нужно ${formatNum(cost)} 🪙); }
+        });
+
+        $('btn-open-quests').addEventListener('click', () => {
+            showModal(<div style="text-align: left; font-size: 0.9rem;"><b>Активные квесты:</b><br><br>🔥 <b>Комбо:</b> ${state.dailyClicks}/50 кликов.<br><span style="color: var(--text-muted); font-size: 0.8rem;">Награда: 1 💎 Onyx</span></div>);
+        });
+
+        $('btn-open-refs').addEventListener('click', () => {
+            showModal('<div style="color: var(--text-muted); text-align: center; margin-top: 20px;">Ты пока никого не пригласил.<br><br>Кидай свою ссылку из вкладки "Топы" друзьям, и получай 10% от их дохода!</div>');
+        });
+
+        $('btn-combo').addEventListener('click', () => {
+            if (state.dailyClicks >= 50 && !state.comboClaimed) {
+                state.comboClaimed = true; state.onyxCoins += 1; haptic('success');
+                showModal("Комбо выполнено!<br>Ты получил 1 💎 Onyx"); updateUI();
+            } else if (state.comboClaimed) { showModal("Ты уже забрал награду!"); } 
+            else { showModal(Добудь еще ${50 - state.dailyClicks} кристаллов!); }
+        });
+
+        $('btn-bonus').addEventListener('click', () => {
+            const now = Date.now(); const cooldown = 60 * 1000;
+            if (now - state.lastBonusTime > cooldown) {
+                state.lastBonusTime = now; let reward = state.clickPower * 100;
+                state.score += reward; state.totalEarned += reward; state.energy = state.maxEnergy;
+                haptic('success'); showModal(Бонус получен!<br>+${formatNum(reward)} 🪙<br>Энергия восстановлена!); updateUI();
+            } else {
+                showModal(Бонус через ${Math.ceil((cooldown - (now - state.lastBonusTime)) / 1000)} сек.);
+            }
+        });
+
+        $('btn-case').addEventListener('click', () => {
+            if (state.onyxCoins >= 1) {
+                state.onyxCoins -= 1; haptic('success');
+                let rewards = [{ text: "1000 🪙", apply: () => { state.score += 1000; state.totalEarned += 1000; } }, { text: "5000 🪙", apply: () => { state.score += 5000; state.totalEarned += 5000; } }];
+                let win = rewards[Math.floor(Math.random() * rewards.length)]; win.apply();
+                showModal(Кейс открыт!<br>Выпало: ${win.text}); updateUI();
+            } else { showModal("Недостаточно 💎 Onyx!<br>Выполни комбо."); }
+        });
+
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+                item.classList.add('active');
+                $(item.dataset.screen).classList.add('active');
+            });
+        });
+
+        function renderTops(type) {
+            let html = '';
+            if (type === 'coins') {
+                let list = <div class="lb-item" style="border: 1px solid var(--gold); background: rgba(251, 191, 36, 0.15);"><span class="lb-rank" style="font-size: 1.1rem;">👑 1</span><span class="lb-name" style="color: var(--gold); font-weight: bold;">${user.first_name} (Вы)</span><span class="lb-val">${formatNum(state.totalEarned)} 🪙</span></div>;
+                for(let i = 2; i <= 20; i++) { list += <div class="lb-item"><span class="lb-rank">${i}</span><span class="lb-name">Farmer_${i}</span><span class="lb-val">${formatNum(1000000 - (i * 9500))} 🪙</span></div>; }
+[17.10.2026 15:13] николаs: html = list;
+            } else if (type === 'refs') {
+                let list = <div class="lb-item" style="border: 1px solid var(--accent);"><span class="lb-rank" style="font-size: 1.1rem;">1</span><span class="lb-name" style="color: var(--accent); font-weight: bold;">${user.first_name} (Вы)</span><span class="lb-val">0 👥</span></div>;
+                for(let i = 2; i <= 20; i++) { list += <div class="lb-item"><span class="lb-rank">${i}</span><span class="lb-name">Inviter_${i}</span><span class="lb-val">${100 - i} 👥</span></div>; }
+                html = list;
+            } else if (type === 'donates') {
+                let list = <div class="lb-item" style="border: 1px solid var(--onyx);"><span class="lb-rank" style="font-size: 1.1rem;">1</span><span class="lb-name" style="color: var(--onyx); font-weight: bold;">${user.first_name} (Вы)</span><span class="lb-val">0 💎</span></div>;
+                for(let i = 2; i <= 10; i++) { list += <div class="lb-item"><span class="lb-rank">${i}</span><span class="lb-name">Whale_${i}</span><span class="lb-val">${(11 - i) * 1000} 💎</span></div>; }
+                html = list;
+            }
+            lbList.innerHTML = html;
+        }
+
+        document.querySelectorAll('.lb-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.lb-tab').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                renderTops(btn.dataset.lb);
+            });
+        });
+
+        $('profile-name').innerText = user.first_name;
+        $('profile-id').innerText = ID: ${user.id};
+        if (user.photo_url) $('avatar').style.backgroundImage = url(${user.photo_url});
+
+        $('open-shop').addEventListener('click', () => $('shop-overlay').classList.add('open'));
+        $('close-shop').addEventListener('click', () => $('shop-overlay').classList.remove('open'));
+
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+                btn.classList.add('active');
+                $(${btn.dataset.tab}-tab).style.display = 'flex';
+            });
+        });
+
+        $('up-power').addEventListener('click', () => { if (state.score >= costs.power) { state.score -= costs.power; state.clickPower += 1; costs.power = Math.floor(costs.power * 1.5); haptic('success'); updateUI(); } });
+        $('up-energy').addEventListener('click', () => { if (state.score >= costs.energy) { state.score -= costs.energy; state.maxEnergy += 50; state.energy += 50; costs.energy = Math.floor(costs.energy * 2); haptic('success'); updateUI(); } });
+        $('up-regen').addEventListener('click', () => { if (state.score >= costs.regen) { state.score -= costs.regen; state.regenRate += 1; costs.regen = Math.floor(costs.regen * 2); haptic('success'); updateUI(); } });
+        $('up-crit-chance').addEventListener('click', () => { if (state.score >= costs.critChance) { state.score -= costs.critChance; state.critChance = Math.min(0.5, state.critChance + 0.02); costs.critChance = Math.floor(costs.critChance * 1.8); haptic('success'); updateUI(); } });
+        $('up-crit-mult').addEventListener('click', () => { if (state.score >= costs.critMult) { state.score -= costs.critMult; state.critMult += 1; costs.critMult = Math.floor(costs.critMult * 2); haptic('success'); updateUI(); } });
+        
+        $('biz-farm').addEventListener('click', () => { if (state.score >= costs.farm) { state.score -= costs.farm; state.passiveIncome += 1; costs.farm = Math.floor(costs.farm * 1.3); haptic('success'); updateUI(); } });
+[17.10.2026 15:13] николаs: $('biz-tractor').addEventListener('click', () => { if (state.score >= costs.tractor) { state.score -= costs.tractor; state.passiveIncome += 5; costs.tractor = Math.floor(costs.tractor * 1.3); haptic('success'); updateUI(); } });
+        $('biz-factory').addEventListener('click', () => { if (state.score >= costs.factory) { state.score -= costs.factory; state.passiveIncome += 20; costs.factory = Math.floor(costs.factory * 1.3); haptic('success'); updateUI(); } });
+
+        $('modal-close').addEventListener('click', () => modal.style.display = 'none');
+
+        updateUI();
+    </script>
+</body>
+</html>
